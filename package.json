@@ -1,0 +1,121 @@
+{
+  "name": "cp-sidekick",
+  "displayName": "CP Sidekick",
+  "description": "Competitive programming sidekick for Codeforces and AtCoder — fetch, run, and submit without leaving VS Code.",
+  "version": "0.1.0",
+  "publisher": "cp-sidekick",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onCommand:cpSidekick.setupProblem"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "cpSidekick.setupProblem",
+        "title": "CP: Setup Problem"
+      },
+      {
+        "command": "cpSidekick.runTests",
+        "title": "CP: Run Tests"
+      },
+      {
+        "command": "cpSidekick.addTestCase",
+        "title": "CP: Add Test Case"
+      },
+      {
+        "command": "cpSidekick.login",
+        "title": "CP: Sign In"
+      },
+      {
+        "command": "cpSidekick.logout",
+        "title": "CP: Sign Out"
+      },
+      {
+        "command": "cpSidekick.submitSolution",
+        "title": "CP: Submit Solution"
+      }
+    ],
+    "configuration": {
+      "title": "CP Sidekick",
+      "properties": {
+        "cpSidekick.defaultLanguage": {
+          "type": "string",
+          "enum": ["cpp", "python", "java"],
+          "default": "cpp",
+          "description": "Default language for new problems."
+        },
+        "cpSidekick.workspaceRoot": {
+          "type": "string",
+          "default": "cp",
+          "description": "Subfolder inside the workspace where problem folders are scaffolded."
+        },
+        "cpSidekick.cpp.compiler": {
+          "type": "string",
+          "default": "g++",
+          "description": "C++ compiler executable."
+        },
+        "cpSidekick.cpp.flags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": ["-std=c++17", "-O2", "-o"],
+          "description": "Extra flags passed to the C++ compiler (output flag -o is appended automatically)."
+        },
+        "cpSidekick.python.executable": {
+          "type": "string",
+          "default": "python",
+          "description": "Python interpreter executable."
+        },
+        "cpSidekick.java.executable": {
+          "type": "string",
+          "default": "java",
+          "description": "Java runtime executable."
+        },
+        "cpSidekick.timeLimitBufferMs": {
+          "type": "number",
+          "default": 1000,
+          "description": "Extra milliseconds added to the problem's time limit before a local TLE is reported."
+        },
+        "cpSidekick.codeforces.languageId": {
+          "type": "object",
+          "default": {
+            "cpp": "91",
+            "python": "70",
+            "java": "87"
+          },
+          "description": "Codeforces programTypeId per language. Inspect the <select> on the live submit page if these become stale."
+        },
+        "cpSidekick.atcoder.languageId": {
+          "type": "object",
+          "default": {
+            "cpp": "5001",
+            "python": "5055",
+            "java": "5005"
+          },
+          "description": "AtCoder LanguageId per language. These can vary per contest — inspect the <select> on the live submit page."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "copy-templates": "xcopy /Y /I src\\templates out\\templates",
+    "build": "npm run compile && npm run copy-templates",
+    "package": "npm run build && vsce package",
+    "watch": "tsc -watch -p ./"
+  },
+  "dependencies": {
+    "axios": "^1.7.2",
+    "axios-cookiejar-support": "^5.0.0",
+    "cheerio": "^1.0.0",
+    "tough-cookie": "^4.1.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/tough-cookie": "^4.0.5",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.4.0"
+  }
+}
