@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { scaffoldProblem, findProblemJson, addTestCase } from './core/workspaceManager';
-import type { ProblemMeta } from './types';
+import { CodeforcesClient, detectCodeforcesUrl } from './platforms/codeforces';
+import type { Language } from './types';
 
 export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
@@ -18,26 +19,40 @@ export function activate(context: vscode.ExtensionContext): void {
         config.get<string>('workspaceRoot', 'cp')
       );
 
-      // Hard-coded dummy meta for Phase 1 — will be replaced by real fetcher in Phase 2/3
-      const meta: ProblemMeta = {
-        platform: 'codeforces',
-        contestId: '1',
-        problemId: 'A',
-        title: 'Theatre Square',
-        url: 'https://codeforces.com/problemset/problem/1/A',
-        timeLimitMs: 1000,
-        memoryLimitMb: 256,
-        language: config.get<'cpp' | 'python' | 'java'>('defaultLanguage', 'cpp'),
-      };
+      const url = await vscode.window.showInputBox({
+        prompt: 'Problem URL',
+        placeHolder: 'https://codeforces.com/problemset/problem/1/A',
+        validateInput: v => v.startsWith('http') ? undefined : 'Enter a valid URL',
+      });
+      if (!url) { return; }
 
-      try {
-        const solutionFile = await scaffoldProblem(meta, workspaceRoot, [], context.extensionPath);
-        const doc = await vscode.workspace.openTextDocument(solutionFile);
-        await vscode.window.showTextDocument(doc);
-        vscode.window.showInformationMessage(`CP Sidekick: Scaffolded ${meta.title}`);
-      } catch (err) {
-        vscode.window.showErrorMessage(`CP Sidekick: Setup failed — ${String(err)}`);
-      }
+      const language = await vscode.window.showQuickPick(
+        ['cpp', 'python', 'java'],
+        { placeHolder: 'Select language' }
+      ) as Language | undefined;
+      if (!language) { return; }
+
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'CP Sidekick: Fetching problem...' },
+        async () => {
+          try {
+            if (!detectCodeforcesUrl(url)) {
+              vscode.window.showErrorMessage('CP Sidekick: Only Codeforces URLs are supported right now.');
+              return;
+            }
+
+            const { meta, testCases } = await new CodeforcesClient().fetchProblem(url);
+            meta.language = language;
+
+            const solutionFile = await scaffoldProblem(meta, workspaceRoot, testCases, context.extensionPath);
+            const doc = await vscode.workspace.openTextDocument(solutionFile);
+            await vscode.window.showTextDocument(doc);
+            vscode.window.showInformationMessage(`CP Sidekick: Ready — ${meta.title} (${testCases.length} test cases)`);
+          } catch (err) {
+            vscode.window.showErrorMessage(`CP Sidekick: Setup failed — ${String(err)}`);
+          }
+        }
+      );
     }),
 
     vscode.commands.registerCommand('cpSidekick.runTests', () => {
