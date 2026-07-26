@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "CP Sidekick Companion",
+  "version": "1.0.0",
+  "description": "Send the current Codeforces problem to VS Code with one click.",
+  "permissions": ["activeTab"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "CP Sidekick"
+  }
+}

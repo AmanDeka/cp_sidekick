@@ -86,6 +86,11 @@
           },
           "description": "Codeforces programTypeId per language. Inspect the <select> on the live submit page if these become stale."
         },
+        "cpSidekick.companionPort": {
+          "type": "number",
+          "default": 27121,
+          "description": "Port the VS Code companion server listens on. Must match the Chrome extension setting."
+        },
         "cpSidekick.atcoder.languageId": {
           "type": "object",
           "default": {

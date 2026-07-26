@@ -2,9 +2,15 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { scaffoldProblem, findProblemJson, addTestCase } from './core/workspaceManager';
 import { CodeforcesClient, detectCodeforcesUrl } from './platforms/codeforces';
+import { startServer } from './core/server';
 import type { Language } from './types';
 
 export function activate(context: vscode.ExtensionContext): void {
+  const config = vscode.workspace.getConfiguration('cpSidekick');
+  const port = config.get<number>('companionPort', 27121);
+  const server = startServer(port, context.extensionPath);
+  context.subscriptions.push({ dispose: () => server.close() });
+
   context.subscriptions.push(
     vscode.commands.registerCommand('cpSidekick.setupProblem', async () => {
       const workspaceFolders = vscode.workspace.workspaceFolders;
