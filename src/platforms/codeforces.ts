@@ -1,6 +1,7 @@
 import * as cheerio from 'cheerio';
 import type { CheerioAPI } from 'cheerio';
 import type { Element, Text, AnyNode } from 'domhandler';
+import { CookieJar } from 'tough-cookie';
 import { makeClient } from './http';
 import type { IPlatform, FetchResult } from './types';
 import type { ProblemMeta, TestCase, AuthSession, Language } from '../types';
@@ -53,6 +54,27 @@ function parseMemoryLimit(text: string): number {
     return match ? parseInt(match[1], 10) : 256;
 }
 
+function randomAlphanumeric(length: number): string {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    let result = '';
+    for (let i = 0; i < length; i++) {
+        result += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return result;
+}
+
+function extractCsrf($: CheerioAPI): string {
+    const token = $('input[name="csrf_token"]').first().val() as string | undefined;
+    if (!token) {
+        throw new Error('Could not find CSRF token on Codeforces page.');
+    }
+    return token;
+}
+
+function restoreJar(cookieJarJson: string): CookieJar {
+    return CookieJar.deserializeSync(JSON.parse(cookieJarJson));
+}
+
 export class CodeforcesClient implements IPlatform {
     async fetchProblem(url: string): Promise<FetchResult> {
         const client = makeClient();
@@ -92,12 +114,117 @@ export class CodeforcesClient implements IPlatform {
         return { meta, testCases };
     }
 
-    async login(_username: string, _password: string): Promise<AuthSession> {
-        throw new Error('Login not implemented yet — coming in Phase 6');
+    async login(username: string, password: string): Promise<AuthSession> {
+        const jar = new CookieJar();
+        const client = makeClient(jar);
+
+        const loginUrl = 'https://codeforces.com/enter';
+        const pageRes = await client.get<string>(loginUrl);
+        const $page = cheerio.load(pageRes.data);
+
+        if ($page('.rc-anchor-container, .g-recaptcha').length > 0) {
+            throw new Error(
+                'Codeforces is showing a CAPTCHA challenge. ' +
+                'Log in via browser first to clear it, then try again.'
+            );
+        }
+
+        const csrf = extractCsrf($page);
+        const ftaa = randomAlphanumeric(18);
+        const bfaa = randomAlphanumeric(18);
+
+        const body = new URLSearchParams({
+            csrf_token: csrf,
+            action: 'enter',
+            handleOrEmail: username,
+            password,
+            ftaa,
+            bfaa,
+            _tta: '0',
+            remember: 'on',
+        });
+
+        const loginRes = await client.post<string>(
+            `${loginUrl}?csrf_token=${csrf}`,
+            body.toString(),
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': loginUrl } }
+        );
+
+        const $after = cheerio.load(loginRes.data);
+
+        if ($after('.rc-anchor-container, .g-recaptcha').length > 0) {
+            throw new Error(
+                'Codeforces requires CAPTCHA verification. ' +
+                'This extension cannot complete sign-in when CAPTCHA is active.'
+            );
+        }
+
+        if ($after('#enterForm').length > 0) {
+            const errText = $after('.error').first().text().trim();
+            throw new Error(
+                errText ||
+                'Login failed — check your handle/email and password. ' +
+                'Accounts with 2FA cannot sign in through this extension.'
+            );
+        }
+
+        // Extract handle from the top nav
+        const handle =
+            $after('a[href^="/profile/"]').first().text().trim() ||
+            username;
+
+        return {
+            platform: 'codeforces',
+            handle,
+            cookieJarJson: JSON.stringify(jar.toJSON()),
+        };
     }
 
-    async submit(_meta: ProblemMeta, _solutionCode: string, _session: AuthSession): Promise<string> {
-        throw new Error('Submit not implemented yet — coming in Phase 7');
+    async submit(meta: ProblemMeta, solutionCode: string, session: AuthSession, languageId: string): Promise<string> {
+        const jar = restoreJar(session.cookieJarJson);
+        const client = makeClient(jar);
+
+        const submitPageUrl = `https://codeforces.com/contest/${meta.contestId}/submit`;
+        const pageRes = await client.get<string>(submitPageUrl);
+        const $page = cheerio.load(pageRes.data);
+
+        // Redirected to login page — session expired
+        if ($page('#enterForm').length > 0) {
+            throw new Error('Your Codeforces session has expired. Run "CP: Sign In" again.');
+        }
+
+        const csrf = extractCsrf($page);
+        const ftaa = randomAlphanumeric(18);
+        const bfaa = randomAlphanumeric(18);
+
+        const body = new URLSearchParams({
+            csrf_token: csrf,
+            action: 'submitSolutionFormSubmit',
+            contestId: meta.contestId,
+            submittedProblemIndex: meta.problemId,
+            programTypeId: languageId,
+            source: solutionCode,
+            tabSize: '4',
+            _tta: '0',
+            ftaa,
+            bfaa,
+        });
+
+        const submitRes = await client.post<string>(
+            `${submitPageUrl}?csrf_token=${csrf}`,
+            body.toString(),
+            { headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Referer': submitPageUrl } }
+        );
+
+        const $after = cheerio.load(submitRes.data);
+
+        // If submit form is still on the page, something went wrong
+        if ($after('#submitSolutionForm').length > 0) {
+            const errText = $after('.error').first().text().trim();
+            throw new Error(errText || 'Submission failed — the form was rejected by Codeforces.');
+        }
+
+        return `https://codeforces.com/contest/${meta.contestId}/my`;
     }
 }
 

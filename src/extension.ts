@@ -4,9 +4,10 @@ import * as fs from 'fs';
 import { scaffoldProblem, findProblemJson, readTestCases, addTestCase } from './core/workspaceManager';
 import { runTests } from './core/runner';
 import { showResults } from './ui/resultsPanel';
+import { getSession, setSession, clearSession } from './core/secrets';
 import { CodeforcesClient, detectCodeforcesUrl } from './platforms/codeforces';
 import { startServer } from './core/server';
-import type { Language, ProblemMeta } from './types';
+import type { Language, Platform, ProblemMeta, AuthSession } from './types';
 
 export function activate(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration('cpSidekick');
@@ -138,16 +139,107 @@ export function activate(context: vscode.ExtensionContext): void {
       }
     }),
 
-    vscode.commands.registerCommand('cpSidekick.login', () => {
-      vscode.window.showInformationMessage('CP Sidekick: Sign In — coming in Phase 6');
+    vscode.commands.registerCommand('cpSidekick.login', async () => {
+      const platform = await vscode.window.showQuickPick(
+        [{ label: 'Codeforces', value: 'codeforces' as Platform }],
+        { placeHolder: 'Select platform' }
+      );
+      if (!platform) { return; }
+
+      const username = await vscode.window.showInputBox({
+        prompt: `${platform.label} handle or email`,
+        placeHolder: 'handle / email',
+      });
+      if (!username) { return; }
+
+      const password = await vscode.window.showInputBox({
+        prompt: `${platform.label} password`,
+        password: true,
+      });
+      if (!password) { return; }
+
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: `CP Sidekick: Signing in to ${platform.label}...` },
+        async () => {
+          try {
+            const client = new CodeforcesClient();
+            const session = await client.login(username, password);
+            await setSession(context.secrets, platform.value, session.cookieJarJson);
+            vscode.window.showInformationMessage(`CP Sidekick: Signed in as ${session.handle}`);
+          } catch (err) {
+            vscode.window.showErrorMessage(`CP Sidekick: Sign in failed — ${String(err)}`);
+          }
+        }
+      );
     }),
 
-    vscode.commands.registerCommand('cpSidekick.logout', () => {
-      vscode.window.showInformationMessage('CP Sidekick: Sign Out — coming in Phase 6');
+    vscode.commands.registerCommand('cpSidekick.logout', async () => {
+      const platform = await vscode.window.showQuickPick(
+        [{ label: 'Codeforces', value: 'codeforces' as Platform }],
+        { placeHolder: 'Select platform to sign out of' }
+      );
+      if (!platform) { return; }
+
+      await clearSession(context.secrets, platform.value);
+      vscode.window.showInformationMessage(`CP Sidekick: Signed out of ${platform.label}`);
     }),
 
-    vscode.commands.registerCommand('cpSidekick.submitSolution', () => {
-      vscode.window.showInformationMessage('CP Sidekick: Submit Solution — coming in Phase 7');
+    vscode.commands.registerCommand('cpSidekick.submitSolution', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('CP Sidekick: Open a solution file first.');
+        return;
+      }
+
+      const solutionFile = editor.document.uri.fsPath;
+      const problemJsonPath = findProblemJson(solutionFile);
+      if (!problemJsonPath) {
+        vscode.window.showErrorMessage('CP Sidekick: No problem.json found — run Setup Problem first.');
+        return;
+      }
+
+      const meta: ProblemMeta = JSON.parse(fs.readFileSync(problemJsonPath, 'utf8'));
+
+      const cookieJarJson = await getSession(context.secrets, meta.platform);
+      if (!cookieJarJson) {
+        vscode.window.showErrorMessage(`CP Sidekick: Not signed in to ${meta.platform}. Run "CP: Sign In" first.`);
+        return;
+      }
+
+      const confirm = await vscode.window.showWarningMessage(
+        `Submit ${meta.title} (${meta.problemId}) to ${meta.platform}?`,
+        { modal: true },
+        'Submit'
+      );
+      if (confirm !== 'Submit') { return; }
+
+      await editor.document.save();
+      const solutionCode = fs.readFileSync(solutionFile, 'utf8');
+
+      const cfg = vscode.workspace.getConfiguration('cpSidekick');
+      const langIds = cfg.get<Record<string, string>>(`${meta.platform}.languageId`, {});
+      const languageId = langIds[meta.language] ?? '91';
+
+      const session: AuthSession = { platform: meta.platform, handle: '', cookieJarJson };
+
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'CP Sidekick: Submitting...' },
+        async () => {
+          try {
+            const client = new CodeforcesClient();
+            const statusUrl = await client.submit(meta, solutionCode, session, languageId);
+            const open = await vscode.window.showInformationMessage(
+              'CP Sidekick: Submitted! View your submission?',
+              'Open'
+            );
+            if (open === 'Open') {
+              vscode.env.openExternal(vscode.Uri.parse(statusUrl));
+            }
+          } catch (err) {
+            vscode.window.showErrorMessage(`CP Sidekick: Submit failed — ${String(err)}`);
+          }
+        }
+      );
     })
   );
 }

@@ -8,5 +8,6 @@ export interface FetchResult {
 export interface IPlatform {
     fetchProblem(url: string): Promise<FetchResult>;
     login(username: string, password: string): Promise<AuthSession>;
-    submit(meta: ProblemMeta, solutionCode: string, session: AuthSession): Promise<string>;
+    // Returns a URL to the submission status page.
+    submit(meta: ProblemMeta, solutionCode: string, session: AuthSession, languageId: string): Promise<string>;
 }
