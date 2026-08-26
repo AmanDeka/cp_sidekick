@@ -1,7 +1,8 @@
 const PORT = 27121;
 
-const btn = document.getElementById('btn');
-const status = document.getElementById('status');
+const btn        = document.getElementById('btn');
+const sessionBtn = document.getElementById('session-btn');
+const status     = document.getElementById('status');
 
 function setStatus(msg, type) {
   status.textContent = msg;
@@ -30,7 +31,7 @@ function parseProblemPage() {
   }
 
   const url = window.location.href;
-  const contestMatch  = url.match(/\/contest\/(\d+)\/problem\/([^/?#]+)/i);
+  const contestMatch    = url.match(/\/contest\/(\d+)\/problem\/([^/?#]+)/i);
   const problemsetMatch = url.match(/\/problemset\/problem\/(\d+)\/([^/?#]+)/i);
   const m = contestMatch || problemsetMatch;
   if (!m) { return null; }
@@ -43,8 +44,8 @@ function parseProblemPage() {
     ? titleEl.textContent.trim().replace(/^[A-Z]\.\s*/, '')
     : `${contestId}${problemId}`;
 
-  const timeLimitText  = document.querySelector('.time-limit')?.textContent ?? '';
-  const memLimitText   = document.querySelector('.memory-limit')?.textContent ?? '';
+  const timeLimitText = document.querySelector('.time-limit')?.textContent ?? '';
+  const memLimitText  = document.querySelector('.memory-limit')?.textContent ?? '';
 
   const tlMatch = timeLimitText.match(/([\d.]+)\s*second/i);
   const timeLimitMs = tlMatch ? Math.round(parseFloat(tlMatch[1]) * 1000) : 2000;
@@ -106,9 +107,41 @@ btn.addEventListener('click', async () => {
     } else {
       setStatus(data.error ?? 'VS Code returned an error.', 'error');
     }
-  } catch (err) {
+  } catch {
     setStatus('VS Code not reachable. Is it open with a workspace?', 'error');
   }
 
   btn.disabled = false;
+});
+
+sessionBtn.addEventListener('click', async () => {
+  sessionBtn.disabled = true;
+  setStatus('Reading cookies…');
+
+  try {
+    const cookies = await chrome.cookies.getAll({ domain: 'codeforces.com' });
+    if (cookies.length === 0) {
+      setStatus('No Codeforces cookies found. Log in via Chrome first.', 'error');
+      sessionBtn.disabled = false;
+      return;
+    }
+
+    setStatus('Sending session to VS Code…');
+    const res = await fetch(`http://127.0.0.1:${PORT}/session`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ platform: 'codeforces', cookies }),
+    });
+    const data = await res.json();
+
+    if (res.ok) {
+      setStatus('Session exported!', 'ok');
+    } else {
+      setStatus(data.error ?? 'VS Code returned an error.', 'error');
+    }
+  } catch {
+    setStatus('VS Code not reachable. Is it open with a workspace?', 'error');
+  }
+
+  sessionBtn.disabled = false;
 });

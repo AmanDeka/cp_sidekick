@@ -1,6 +1,7 @@
 import * as http from 'http';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { CookieJar, Cookie } from 'tough-cookie';
 import { scaffoldProblem } from './workspaceManager';
 import type { Language, Platform, ProblemMeta, TestCase } from '../types';
 
@@ -14,6 +15,16 @@ function jsonResponse(res: http.ServerResponse, status: number, body: object): v
   res.end(payload);
 }
 
+interface ChromeCookie {
+  name: string;
+  value: string;
+  domain: string;
+  path: string;
+  secure: boolean;
+  httpOnly: boolean;
+  expirationDate?: number;
+}
+
 interface CompanionPayload {
   platform?: string;
   contestId?: string;
@@ -24,11 +35,34 @@ interface CompanionPayload {
   memoryLimitMb?: number;
   testCases?: TestCase[];
   language?: string;
+  cookies?: ChromeCookie[];
+}
+
+function buildCookieJar(chromeCookies: ChromeCookie[]): string {
+  const jar = new CookieJar();
+  for (const c of chromeCookies) {
+    try {
+      const cookie = new Cookie({
+        key: c.name,
+        value: c.value,
+        domain: c.domain.replace(/^\./, ''),
+        path: c.path || '/',
+        secure: c.secure,
+        httpOnly: c.httpOnly,
+        expires: c.expirationDate ? new Date(c.expirationDate * 1000) : undefined,
+      });
+      jar.setCookieSync(cookie, 'https://codeforces.com/');
+    } catch {
+      // skip malformed cookies
+    }
+  }
+  return JSON.stringify(jar.toJSON());
 }
 
 export function startServer(
   port: number,
   extensionPath: string,
+  onSession: (platform: Platform, cookieJarJson: string) => Promise<void>,
 ): http.Server {
   const server = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') {
@@ -57,6 +91,24 @@ export function startServer(
         return;
       }
 
+      // /session route — import browser cookies as the stored session
+      if (req.url === '/session') {
+        if (!payload.cookies || !Array.isArray(payload.cookies)) {
+          jsonResponse(res, 400, { error: 'Missing cookies array' });
+          return;
+        }
+        try {
+          const platform = (payload.platform ?? 'codeforces') as Platform;
+          const cookieJarJson = buildCookieJar(payload.cookies);
+          await onSession(platform, cookieJarJson);
+          jsonResponse(res, 200, { ok: true });
+        } catch (err) {
+          jsonResponse(res, 500, { error: String(err) });
+        }
+        return;
+      }
+
+      // Default route — scaffold a problem
       const { contestId, problemId, title, url, timeLimitMs, memoryLimitMb, testCases } = payload;
 
       if (!contestId || !problemId || !url) {

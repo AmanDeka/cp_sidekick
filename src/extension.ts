@@ -12,7 +12,10 @@ import type { Language, Platform, ProblemMeta, AuthSession } from './types';
 export function activate(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration('cpSidekick');
   const port = config.get<number>('companionPort', 27121);
-  const server = startServer(port, context.extensionPath);
+  const server = startServer(port, context.extensionPath, async (platform, cookieJarJson) => {
+    await setSession(context.secrets, platform, cookieJarJson);
+    vscode.window.showInformationMessage(`CP Sidekick: Signed in to ${platform} via browser session.`);
+  });
   context.subscriptions.push({ dispose: () => server.close() });
 
   context.subscriptions.push(
