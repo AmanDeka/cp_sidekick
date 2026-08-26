@@ -59,9 +59,10 @@ cp/
 | `cpSidekick.defaultLanguage` | `cpp` | Default language for new problems (`cpp`, `python`, `java`) |
 | `cpSidekick.workspaceRoot` | `cp` | Subfolder problems are scaffolded into |
 | `cpSidekick.cpp.compiler` | `g++` | C++ compiler executable |
-| `cpSidekick.cpp.flags` | `["-std=c++17", "-O2"]` | Extra compiler flags |
-| `cpSidekick.python.executable` | `python` | Python interpreter |
-| `cpSidekick.java.executable` | `java` | Java runtime |
+| `cpSidekick.cpp.flags` | `["-std=c++17", "-O2", "-Wall"]` | Compiler flags (exclude `-o`) |
+| `cpSidekick.python.executable` | `python3` | Python interpreter |
+| `cpSidekick.java.compiler` | `javac` | Java compiler executable |
+| `cpSidekick.java.runtime` | `java` | Java runtime executable |
 | `cpSidekick.timeLimitBufferMs` | `1000` | Extra ms added to time limit before a local TLE is flagged |
 | `cpSidekick.codeforces.languageId` | see below | Codeforces `programTypeId` per language |
 | `cpSidekick.atcoder.languageId` | see below | AtCoder `LanguageId` per language |
