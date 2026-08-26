@@ -1,9 +1,8 @@
 import * as http from 'http';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { CodeforcesClient, detectCodeforcesUrl } from '../platforms/codeforces';
 import { scaffoldProblem } from './workspaceManager';
-import type { Language } from '../types';
+import type { Language, Platform, ProblemMeta, TestCase } from '../types';
 
 function jsonResponse(res: http.ServerResponse, status: number, body: object): void {
   const payload = JSON.stringify(body);
@@ -13,6 +12,18 @@ function jsonResponse(res: http.ServerResponse, status: number, body: object): v
     'Access-Control-Allow-Headers': 'Content-Type',
   });
   res.end(payload);
+}
+
+interface CompanionPayload {
+  platform?: string;
+  contestId?: string;
+  problemId?: string;
+  title?: string;
+  url?: string;
+  timeLimitMs?: number;
+  memoryLimitMb?: number;
+  testCases?: TestCase[];
+  language?: string;
 }
 
 export function startServer(
@@ -38,23 +49,24 @@ export function startServer(
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
-      let parsed: { url?: string; language?: string };
+      let payload: CompanionPayload;
       try {
-        parsed = JSON.parse(body);
+        payload = JSON.parse(body);
       } catch {
         jsonResponse(res, 400, { error: 'Invalid JSON' });
         return;
       }
 
-      const { url, language: langRaw } = parsed;
-      if (!url || typeof url !== 'string') {
-        jsonResponse(res, 400, { error: 'Missing url field' });
+      const { contestId, problemId, title, url, timeLimitMs, memoryLimitMb, testCases } = payload;
+
+      if (!contestId || !problemId || !url) {
+        jsonResponse(res, 400, { error: 'Missing required fields: contestId, problemId, url' });
         return;
       }
 
       const config = vscode.workspace.getConfiguration('cpSidekick');
-      const language: Language = (['cpp', 'python', 'java'].includes(langRaw ?? '')
-        ? langRaw
+      const language: Language = (['cpp', 'python', 'java'].includes(payload.language ?? '')
+        ? payload.language
         : config.get<Language>('defaultLanguage', 'cpp')) as Language;
 
       const workspaceFolders = vscode.workspace.workspaceFolders;
@@ -67,19 +79,23 @@ export function startServer(
         config.get<string>('workspaceRoot', 'cp'),
       );
 
-      if (!detectCodeforcesUrl(url)) {
-        jsonResponse(res, 400, { error: 'Only Codeforces URLs are supported right now' });
-        return;
-      }
+      const meta: ProblemMeta = {
+        platform: (payload.platform ?? 'codeforces') as Platform,
+        contestId,
+        problemId,
+        title: title || `${contestId}${problemId}`,
+        url,
+        timeLimitMs: timeLimitMs ?? 2000,
+        memoryLimitMb: memoryLimitMb ?? 256,
+        language,
+      };
 
       try {
-        const { meta, testCases } = await new CodeforcesClient().fetchProblem(url);
-        meta.language = language;
-        const solutionFile = await scaffoldProblem(meta, workspaceRoot, testCases, extensionPath);
+        const solutionFile = await scaffoldProblem(meta, workspaceRoot, testCases ?? [], extensionPath);
         const doc = await vscode.workspace.openTextDocument(solutionFile);
         await vscode.window.showTextDocument(doc);
         vscode.window.showInformationMessage(
-          `CP Sidekick: Ready — ${meta.title} (${testCases.length} test cases)`,
+          `CP Sidekick: Ready — ${meta.title} (${(testCases ?? []).length} test cases)`,
         );
         jsonResponse(res, 200, { ok: true, title: meta.title });
       } catch (err) {
