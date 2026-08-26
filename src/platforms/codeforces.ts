@@ -54,6 +54,9 @@ function parseMemoryLimit(text: string): number {
     return match ? parseInt(match[1], 10) : 256;
 }
 
+// bfaa is a hardcoded fingerprint used by cf-tool and other CF clients.
+const BFAA = 'f1b3f18c715565b589b7823cda7448ce';
+
 function randomAlphanumeric(length: number): string {
     const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
     let result = '';
@@ -131,7 +134,6 @@ export class CodeforcesClient implements IPlatform {
 
         const csrf = extractCsrf($page);
         const ftaa = randomAlphanumeric(18);
-        const bfaa = randomAlphanumeric(18);
 
         const body = new URLSearchParams({
             csrf_token: csrf,
@@ -139,8 +141,8 @@ export class CodeforcesClient implements IPlatform {
             handleOrEmail: username,
             password,
             ftaa,
-            bfaa,
-            _tta: '0',
+            bfaa: BFAA,
+            _tta: '176',
             remember: 'on',
         });
 
@@ -195,19 +197,19 @@ export class CodeforcesClient implements IPlatform {
 
         const csrf = extractCsrf($page);
         const ftaa = randomAlphanumeric(18);
-        const bfaa = randomAlphanumeric(18);
 
         const body = new URLSearchParams({
             csrf_token: csrf,
-            action: 'submitSolutionFormSubmit',
+            action: 'submitSolutionFormSubmitted',
             contestId: meta.contestId,
             submittedProblemIndex: meta.problemId,
             programTypeId: languageId,
             source: solutionCode,
             tabSize: '4',
-            _tta: '0',
+            sourceCodeConfirmed: 'true',
+            _tta: '594',
             ftaa,
-            bfaa,
+            bfaa: BFAA,
         });
 
         const submitRes = await client.post<string>(
