@@ -59,15 +59,20 @@
         "cpSidekick.cpp.flags": {
           "type": "array",
           "items": { "type": "string" },
-          "default": ["-std=c++17", "-O2", "-o"],
-          "description": "Extra flags passed to the C++ compiler (output flag -o is appended automatically)."
+          "default": ["-std=c++17", "-O2", "-Wall"],
+          "description": "Flags passed to the C++ compiler. The -o flag and output path are added automatically."
         },
         "cpSidekick.python.executable": {
           "type": "string",
-          "default": "python",
+          "default": "python3",
           "description": "Python interpreter executable."
         },
-        "cpSidekick.java.executable": {
+        "cpSidekick.java.compiler": {
+          "type": "string",
+          "default": "javac",
+          "description": "Java compiler executable."
+        },
+        "cpSidekick.java.runtime": {
           "type": "string",
           "default": "java",
           "description": "Java runtime executable."

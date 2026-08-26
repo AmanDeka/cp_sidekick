@@ -1,9 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { scaffoldProblem, findProblemJson, addTestCase } from './core/workspaceManager';
+import * as fs from 'fs';
+import { scaffoldProblem, findProblemJson, readTestCases, addTestCase } from './core/workspaceManager';
+import { runTests } from './core/runner';
+import { showResults } from './ui/resultsPanel';
 import { CodeforcesClient, detectCodeforcesUrl } from './platforms/codeforces';
 import { startServer } from './core/server';
-import type { Language } from './types';
+import type { Language, ProblemMeta } from './types';
 
 export function activate(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration('cpSidekick');
@@ -61,8 +64,50 @@ export function activate(context: vscode.ExtensionContext): void {
       );
     }),
 
-    vscode.commands.registerCommand('cpSidekick.runTests', () => {
-      vscode.window.showInformationMessage('CP Sidekick: Run Tests — coming in Phase 4');
+    vscode.commands.registerCommand('cpSidekick.runTests', async () => {
+      const editor = vscode.window.activeTextEditor;
+      if (!editor) {
+        vscode.window.showErrorMessage('CP Sidekick: Open a solution file first.');
+        return;
+      }
+
+      await editor.document.save();
+      const solutionFile = editor.document.uri.fsPath;
+      const problemJsonPath = findProblemJson(solutionFile);
+      if (!problemJsonPath) {
+        vscode.window.showErrorMessage('CP Sidekick: No problem.json found — run Setup Problem first.');
+        return;
+      }
+
+      const problemDir = path.dirname(problemJsonPath);
+      const meta: ProblemMeta = JSON.parse(fs.readFileSync(problemJsonPath, 'utf8'));
+      const testCases = readTestCases(problemDir);
+      if (testCases.length === 0) {
+        vscode.window.showWarningMessage('CP Sidekick: No test cases found in tests/ folder.');
+        return;
+      }
+
+      const cfg = vscode.workspace.getConfiguration('cpSidekick');
+      const runnerConfig = {
+        cppCompiler:      cfg.get<string>('cpp.compiler', 'g++'),
+        cppFlags:         cfg.get<string[]>('cpp.flags', ['-O2', '-std=c++17', '-Wall']),
+        pythonExecutable: cfg.get<string>('python.executable', 'python3'),
+        javaCompiler:     cfg.get<string>('java.compiler', 'javac'),
+        javaRuntime:      cfg.get<string>('java.runtime', 'java'),
+        timeLimitBufferMs: cfg.get<number>('timeLimitBufferMs', 1000),
+      };
+
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'CP Sidekick: Running tests...' },
+        async () => {
+          try {
+            const results = await runTests(solutionFile, meta, testCases, runnerConfig);
+            showResults(results, meta.title);
+          } catch (err) {
+            vscode.window.showErrorMessage(`CP Sidekick: Run failed — ${String(err)}`);
+          }
+        }
+      );
     }),
 
     vscode.commands.registerCommand('cpSidekick.addTestCase', async () => {
