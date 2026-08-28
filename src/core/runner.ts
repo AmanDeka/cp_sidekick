@@ -19,7 +19,7 @@ interface ProcessResult {
   timedOut: boolean;
 }
 
-function normalizeOutput(s: string): string {
+export function normalizeOutput(s: string): string {
   return s
     .split('\n')
     .map(line => line.trimEnd())
