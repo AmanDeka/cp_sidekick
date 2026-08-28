@@ -122,6 +122,18 @@ async function compile(
   return { runCmd: config.javaRuntime, runArgs: ['Main'], error: null };
 }
 
+function runtimeNotFoundMessage(language: Language, cmd: string, config: RunnerConfig): string {
+  if (language === 'python') {
+    return `Python interpreter "${cmd}" was not found. ` +
+      `Check your PATH or update the cpSidekick.python.executable setting.`;
+  }
+  if (language === 'java') {
+    return `Java runtime "${config.javaRuntime}" was not found. ` +
+      `Check your PATH or update the cpSidekick.java.runtime setting.`;
+  }
+  return `"${cmd}" was not found.`;
+}
+
 export async function runTests(
   solutionFile: string,
   meta: ProblemMeta,
@@ -149,6 +161,14 @@ export async function runTests(
     const start = Date.now();
     const proc = await runProcess(runCmd, runArgs, problemDir, tc.input, timeoutMs);
     const runtimeMs = Date.now() - start;
+
+    if (proc.notFound) {
+      const stderr = runtimeNotFoundMessage(meta.language, runCmd, config);
+      for (const t of testCases.slice(results.length)) {
+        results.push({ testCase: t, status: 'error', actual: '', stderr, runtimeMs: 0 });
+      }
+      return results;
+    }
 
     let status: RunStatus;
     if (proc.timedOut) {
