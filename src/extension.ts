@@ -16,6 +16,7 @@ export function activate(context: vscode.ExtensionContext): void {
   checkCompilerOnActivation(config.get<string>('cpp.compiler', 'g++'),        'C++ compiler',       'cpSidekick.cpp.compiler');
   checkCompilerOnActivation(config.get<string>('python.executable', 'python3'), 'Python interpreter', 'cpSidekick.python.executable');
   checkCompilerOnActivation(config.get<string>('java.compiler', 'javac'),      'Java compiler',      'cpSidekick.java.compiler');
+  checkCompilerOnActivation(config.get<string>('java.runtime', 'java'),        'Java runtime',       'cpSidekick.java.runtime');
 
   const port = config.get<number>('companionPort', 27121);
   const server = startServer(port, context.extensionPath, async (platform, cookieJarJson) => {
