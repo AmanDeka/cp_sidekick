@@ -42,15 +42,18 @@ function buildCookieJar(chromeCookies: ChromeCookie[]): string {
   const jar = new CookieJar();
   for (const c of chromeCookies) {
     try {
-      const cookie = new Cookie({
+      const cookieProps: ConstructorParameters<typeof Cookie>[0] = {
         key: c.name,
         value: c.value,
         domain: c.domain.replace(/^\./, ''),
         path: c.path || '/',
         secure: c.secure,
         httpOnly: c.httpOnly,
-        expires: c.expirationDate ? new Date(c.expirationDate * 1000) : undefined,
-      });
+      };
+      if (c.expirationDate) {
+        cookieProps.expires = new Date(c.expirationDate * 1000);
+      }
+      const cookie = new Cookie(cookieProps);
       jar.setCookieSync(cookie, 'https://codeforces.com/');
     } catch {
       // skip malformed cookies
