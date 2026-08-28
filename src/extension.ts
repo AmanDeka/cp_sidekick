@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as cp from 'child_process';
 import { scaffoldProblem, findProblemJson, readTestCases, addTestCase } from './core/workspaceManager';
 import { runTests } from './core/runner';
 import { showResults } from './ui/resultsPanel';
@@ -11,6 +12,12 @@ import type { Language, Platform, ProblemMeta, AuthSession } from './types';
 
 export function activate(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration('cpSidekick');
+
+  checkCompilerOnActivation(
+    config.get<string>('cpp.compiler', 'g++'),
+    'cpSidekick.cpp.compiler'
+  );
+
   const port = config.get<number>('companionPort', 27121);
   const server = startServer(port, context.extensionPath, async (platform, cookieJarJson) => {
     await setSession(context.secrets, platform, cookieJarJson);
@@ -206,3 +213,20 @@ export function activate(context: vscode.ExtensionContext): void {
 }
 
 export function deactivate(): void {}
+
+function checkCompilerOnActivation(compiler: string, settingKey: string): void {
+  const probe = cp.spawn(compiler, ['--version'], { stdio: 'ignore' });
+  probe.on('error', async (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'ENOENT') { return; }
+    const action = await vscode.window.showWarningMessage(
+      `CP Sidekick: C++ compiler "${compiler}" was not found on PATH. ` +
+      `Install it or update the ${settingKey} setting.`,
+      'Open Settings'
+    );
+    if (action === 'Open Settings') {
+      vscode.commands.executeCommand('workbench.action.openSettings', settingKey);
+    }
+  });
+  // consume close to avoid Node warning about unhandled events
+  probe.on('close', () => {});
+}

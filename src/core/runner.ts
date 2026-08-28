@@ -17,6 +17,7 @@ interface ProcessResult {
   stderr: string;
   exitCode: number;
   timedOut: boolean;
+  notFound: boolean;
 }
 
 export function normalizeOutput(s: string): string {
@@ -39,12 +40,13 @@ function runProcess(
     let stdout = '';
     let stderr = '';
     let settled = false;
+    let notFound = false;
 
     const finish = (exitCode: number, timedOut: boolean) => {
       if (settled) { return; }
       settled = true;
       clearTimeout(timer);
-      resolve({ stdout, stderr, exitCode, timedOut });
+      resolve({ stdout, stderr, exitCode, timedOut, notFound });
     };
 
     const timer = setTimeout(() => {
@@ -52,7 +54,11 @@ function runProcess(
       finish(1, true);
     }, timeoutMs);
 
-    proc.on('error', err => { stderr = err.message; finish(1, false); });
+    proc.on('error', (err: NodeJS.ErrnoException) => {
+      stderr = err.message;
+      notFound = err.code === 'ENOENT';
+      finish(1, false);
+    });
     proc.stdout.on('data', (chunk: Buffer) => { stdout += chunk.toString(); });
     proc.stderr.on('data', (chunk: Buffer) => { stderr += chunk.toString(); });
     proc.stdin.on('error', () => {});
@@ -89,7 +95,11 @@ async function compile(
       30_000
     );
     if (result.exitCode !== 0) {
-      return { runCmd: '', runArgs: [], error: result.stderr || 'Compilation failed' };
+      const error = result.notFound
+        ? `C++ compiler "${config.cppCompiler}" was not found. ` +
+          `Check your PATH or update the cpSidekick.cpp.compiler setting.`
+        : result.stderr || 'Compilation failed';
+      return { runCmd: '', runArgs: [], error };
     }
     return { runCmd: binary, runArgs: [], error: null };
   }
@@ -103,7 +113,11 @@ async function compile(
     30_000
   );
   if (result.exitCode !== 0) {
-    return { runCmd: '', runArgs: [], error: result.stderr || 'Compilation failed' };
+    const error = result.notFound
+      ? `Java compiler "${config.javaCompiler}" was not found. ` +
+        `Check your PATH or update the cpSidekick.java.compiler setting.`
+      : result.stderr || 'Compilation failed';
+    return { runCmd: '', runArgs: [], error };
   }
   return { runCmd: config.javaRuntime, runArgs: ['Main'], error: null };
 }
