@@ -219,14 +219,29 @@ function checkCompilerOnActivation(compiler: string, settingKey: string): void {
   probe.on('error', async (err: NodeJS.ErrnoException) => {
     if (err.code !== 'ENOENT') { return; }
     const action = await vscode.window.showWarningMessage(
-      `CP Sidekick: C++ compiler "${compiler}" was not found on PATH. ` +
-      `Install it or update the ${settingKey} setting.`,
-      'Open Settings'
+      `CP Sidekick: C++ compiler "${compiler}" was not found. Browse to its location to configure it.`,
+      'Browse'
     );
-    if (action === 'Open Settings') {
-      vscode.commands.executeCommand('workbench.action.openSettings', settingKey);
-    }
+    if (action !== 'Browse') { return; }
+
+    const filters: { [name: string]: string[] } = process.platform === 'win32'
+      ? { 'Executable': ['exe'] }
+      : { 'All files': ['*'] };
+
+    const picked = await vscode.window.showOpenDialog({
+      canSelectMany: false,
+      openLabel: 'Select compiler',
+      filters,
+    });
+    if (!picked || picked.length === 0) { return; }
+
+    const selectedPath = picked[0].fsPath;
+    await vscode.workspace.getConfiguration('cpSidekick').update(
+      'cpp.compiler',
+      selectedPath,
+      vscode.ConfigurationTarget.Global
+    );
+    vscode.window.showInformationMessage(`CP Sidekick: C++ compiler set to "${selectedPath}".`);
   });
-  // consume close to avoid Node warning about unhandled events
   probe.on('close', () => {});
 }
