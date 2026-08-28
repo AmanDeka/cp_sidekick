@@ -13,10 +13,9 @@ import type { Language, Platform, ProblemMeta, AuthSession } from './types';
 export function activate(context: vscode.ExtensionContext): void {
   const config = vscode.workspace.getConfiguration('cpSidekick');
 
-  checkCompilerOnActivation(
-    config.get<string>('cpp.compiler', 'g++'),
-    'cpSidekick.cpp.compiler'
-  );
+  checkCompilerOnActivation(config.get<string>('cpp.compiler', 'g++'),        'C++ compiler',       'cpSidekick.cpp.compiler');
+  checkCompilerOnActivation(config.get<string>('python.executable', 'python3'), 'Python interpreter', 'cpSidekick.python.executable');
+  checkCompilerOnActivation(config.get<string>('java.compiler', 'javac'),      'Java compiler',      'cpSidekick.java.compiler');
 
   const port = config.get<number>('companionPort', 27121);
   const server = startServer(port, context.extensionPath, async (platform, cookieJarJson) => {
@@ -214,12 +213,12 @@ export function activate(context: vscode.ExtensionContext): void {
 
 export function deactivate(): void {}
 
-function checkCompilerOnActivation(compiler: string, settingKey: string): void {
+function checkCompilerOnActivation(compiler: string, label: string, settingKey: string): void {
   const probe = cp.spawn(compiler, ['--version'], { stdio: 'ignore' });
   probe.on('error', async (err: NodeJS.ErrnoException) => {
     if (err.code !== 'ENOENT') { return; }
     const action = await vscode.window.showWarningMessage(
-      `CP Sidekick: C++ compiler "${compiler}" was not found. Browse to its location to configure it.`,
+      `CP Sidekick: ${label} "${compiler}" was not found. Browse to its location to configure it.`,
       'Browse'
     );
     if (action !== 'Browse') { return; }
@@ -230,18 +229,15 @@ function checkCompilerOnActivation(compiler: string, settingKey: string): void {
 
     const picked = await vscode.window.showOpenDialog({
       canSelectMany: false,
-      openLabel: 'Select compiler',
+      openLabel: `Select ${label.toLowerCase()}`,
       filters,
     });
     if (!picked || picked.length === 0) { return; }
 
     const selectedPath = picked[0].fsPath;
-    await vscode.workspace.getConfiguration('cpSidekick').update(
-      'cpp.compiler',
-      selectedPath,
-      vscode.ConfigurationTarget.Global
-    );
-    vscode.window.showInformationMessage(`CP Sidekick: C++ compiler set to "${selectedPath}".`);
+    const [section, key] = settingKey.split(/\.(.+)/);
+    await vscode.workspace.getConfiguration(section).update(key, selectedPath, vscode.ConfigurationTarget.Global);
+    vscode.window.showInformationMessage(`CP Sidekick: ${label} set to "${selectedPath}".`);
   });
   probe.on('close', () => {});
 }
