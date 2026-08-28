@@ -19,9 +19,11 @@ export function activate(context: vscode.ExtensionContext): void {
   checkCompilerOnActivation(config.get<string>('java.runtime', 'java'),        'Java runtime',       'cpSidekick.java.runtime');
 
   const port = config.get<number>('companionPort', 27121);
-  const server = startServer(port, context.extensionPath, async (platform, cookieJarJson) => {
+  const server = startServer(port, context.extensionPath, async (platform, cookieJarJson, silent) => {
     await setSession(context.secrets, platform, cookieJarJson);
-    vscode.window.showInformationMessage(`CP Sidekick: Signed in to ${platform} via browser session.`);
+    if (!silent) {
+      vscode.window.showInformationMessage(`CP Sidekick: Signed in to ${platform} via browser session.`);
+    }
   });
   context.subscriptions.push({ dispose: () => server.close() });
 
@@ -114,30 +116,14 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       if (!platform) { return; }
 
-      const username = await vscode.window.showInputBox({
-        prompt: `${platform.label} handle or email`,
-        placeHolder: 'handle / email',
-      });
-      if (!username) { return; }
+      const loginUrls: Record<string, string> = {
+        codeforces: 'https://codeforces.com/enter',
+      };
 
-      const password = await vscode.window.showInputBox({
-        prompt: `${platform.label} password`,
-        password: true,
-      });
-      if (!password) { return; }
-
-      await vscode.window.withProgress(
-        { location: vscode.ProgressLocation.Notification, title: `CP Sidekick: Signing in to ${platform.label}...` },
-        async () => {
-          try {
-            const client = new CodeforcesClient();
-            const session = await client.login(username, password);
-            await setSession(context.secrets, platform.value, session.cookieJarJson);
-            vscode.window.showInformationMessage(`CP Sidekick: Signed in as ${session.handle}`);
-          } catch (err) {
-            vscode.window.showErrorMessage(`CP Sidekick: Sign in failed — ${String(err)}`);
-          }
-        }
+      await vscode.env.openExternal(vscode.Uri.parse(loginUrls[platform.value]));
+      vscode.window.showInformationMessage(
+        `CP Sidekick: Sign in to ${platform.label} in the browser — ` +
+        `your session will be imported automatically once you\'re logged in.`
       );
     }),
 

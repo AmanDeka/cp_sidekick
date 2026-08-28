@@ -62,7 +62,7 @@ function buildCookieJar(chromeCookies: ChromeCookie[]): string {
 export function startServer(
   port: number,
   extensionPath: string,
-  onSession: (platform: Platform, cookieJarJson: string) => Promise<void>,
+  onSession: (platform: Platform, cookieJarJson: string, silent?: boolean) => Promise<void>,
 ): http.Server {
   const server = http.createServer((req, res) => {
     if (req.method === 'OPTIONS') {
@@ -143,6 +143,12 @@ export function startServer(
       };
 
       try {
+        // Silently refresh the session if cookies were included alongside the problem.
+        if (payload.cookies && Array.isArray(payload.cookies) && payload.cookies.length > 0) {
+          const cookieJarJson = buildCookieJar(payload.cookies);
+          await onSession(meta.platform, cookieJarJson, true);
+        }
+
         const solutionFile = await scaffoldProblem(meta, workspaceRoot, testCases ?? [], extensionPath);
         const doc = await vscode.workspace.openTextDocument(solutionFile);
         await vscode.window.showTextDocument(doc);
