@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('cpSidekick.setupProblem', async () => {
       vscode.window.showInformationMessage(
-        'Navigate to the problem page in Chrome, then click the CP Sidekick extension icon to send it to VS Code.',
+        'Navigate to a Codeforces or AtCoder problem page in Chrome, then click the CP Sidekick extension icon to send it to VS Code.',
         'OK'
       );
     }),

@@ -8,8 +8,9 @@ function setStatus(msg, type) {
     status.className = type || '';
 }
 
-// Runs inside the problem page's JS context — no imports, plain DOM.
-function parseProblemPage() {
+// ─── Codeforces page parser (runs inside the page context) ───────────────────
+
+function parseCodeforcesPage() {
     function extractPreText(pre) {
         let result = '';
         for (const node of pre.childNodes) {
@@ -68,22 +69,78 @@ function parseProblemPage() {
     return { platform: 'codeforces', contestId, problemId, title, url, timeLimitMs, memoryLimitMb, testCases };
 }
 
+// ─── AtCoder page parser (runs inside the page context) ──────────────────────
+
+function parseAtCoderPage() {
+    const url = window.location.href;
+    const m = url.match(/\/contests\/([^/]+)\/tasks\/([^/?#]+)/i);
+    if (!m) { return null; }
+
+    const contestId = m[1];
+    const problemId = m[2];
+
+    const rawTitle = document.querySelector('span.h2')?.textContent?.trim()
+        || document.querySelector('h2')?.textContent?.trim()
+        || problemId;
+    const title = rawTitle.replace(/^[A-Za-z\d]+\s*-\s*/, '').trim() || rawTitle;
+
+    // Prefer the English section on bilingual pages
+    const langEn = document.querySelector('.lang-en');
+    const container = langEn || document.getElementById('task-statement') || document.body;
+    const statementText = container.textContent || '';
+
+    const tlMatch = statementText.match(/([\d.]+)\s*sec/i);
+    const timeLimitMs = tlMatch ? Math.round(parseFloat(tlMatch[1]) * 1000) : 2000;
+
+    const mlMatch = statementText.match(/(\d+)\s*MB/i);
+    const memoryLimitMb = mlMatch ? parseInt(mlMatch[1], 10) : 256;
+
+    const inputs  = [];
+    const outputs = [];
+
+    container.querySelectorAll('h3').forEach(h3 => {
+        const text = h3.textContent.trim();
+        const pre  = h3.nextElementSibling;
+        if (!pre || pre.tagName !== 'PRE') { return; }
+
+        const inM  = text.match(/sample input\s*(\d+)/i);
+        const outM = text.match(/sample output\s*(\d+)/i);
+        if (inM)  { inputs[parseInt(inM[1])  - 1] = pre.textContent.trim(); }
+        if (outM) { outputs[parseInt(outM[1]) - 1] = pre.textContent.trim(); }
+    });
+
+    const testCases = [];
+    for (let i = 0; i < inputs.length; i++) {
+        if (inputs[i] !== undefined) {
+            testCases.push({ index: i + 1, input: inputs[i], expected: outputs[i] ?? '' });
+        }
+    }
+
+    return { platform: 'atcoder', contestId, problemId, title, url, timeLimitMs, memoryLimitMb, testCases };
+}
+
+// ─── Button handler ───────────────────────────────────────────────────────────
+
 btn.addEventListener('click', async () => {
     btn.disabled = true;
     setStatus('Parsing problem…');
 
     try {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+        const url = tab.url || '';
 
-        if (!tab.url || !tab.url.includes('codeforces.com')) {
-            setStatus('Not a Codeforces page.', 'error');
+        const isCF      = url.includes('codeforces.com');
+        const isAtCoder = url.includes('atcoder.jp');
+
+        if (!isCF && !isAtCoder) {
+            setStatus('Not a Codeforces or AtCoder page.', 'error');
             btn.disabled = false;
             return;
         }
 
         const results = await chrome.scripting.executeScript({
             target: { tabId: tab.id },
-            func: parseProblemPage,
+            func: isCF ? parseCodeforcesPage : parseAtCoderPage,
         });
 
         const problem = results[0]?.result;
@@ -94,7 +151,8 @@ btn.addEventListener('click', async () => {
         }
 
         // Include cookies so VS Code can refresh the session in the same request.
-        const cookies = await chrome.cookies.getAll({ domain: 'codeforces.com' });
+        const cookieDomain = isCF ? 'codeforces.com' : 'atcoder.jp';
+        const cookies = await chrome.cookies.getAll({ domain: cookieDomain });
         if (cookies.length > 0) {
             problem.cookies = cookies;
         }

@@ -1,40 +1,70 @@
 const PORT = 27121;
 
-// chrome.storage.session persists across service worker restarts (unlike module-level vars).
+// loginTabs: maps tabId (string) -> platform ('codeforces' | 'atcoder')
+// Stored in chrome.storage.session so it survives service worker restarts.
+
 async function getLoginTabs() {
-    const { loginTabs = [] } = await chrome.storage.session.get('loginTabs');
-    return new Set(loginTabs);
+    const { loginTabs = {} } = await chrome.storage.session.get('loginTabs');
+    return loginTabs;
 }
 
-async function saveLoginTabs(set) {
-    await chrome.storage.session.set({ loginTabs: [...set] });
+async function saveLoginTabs(map) {
+    await chrome.storage.session.set({ loginTabs: map });
 }
 
-// When a CF tab visits the login page, mark it so we can detect when login completes.
+function isLoginUrl(url, platform) {
+    if (platform === 'codeforces') { return url.includes('codeforces.com/enter'); }
+    if (platform === 'atcoder')    { return url.includes('atcoder.jp/login'); }
+    return false;
+}
+
+function detectPlatform(url) {
+    if (url.includes('codeforces.com')) { return 'codeforces'; }
+    if (url.includes('atcoder.jp'))     { return 'atcoder'; }
+    return null;
+}
+
+// Extracts the logged-in handle from the page (runs in page context).
+function getCodeforcesHandle() {
+    return document.querySelector('a[href^="/profile/"]')?.textContent?.trim() ?? null;
+}
+
+function getAtCoderHandle() {
+    return document.querySelector('a[href^="/users/"]')?.textContent?.trim() ?? null;
+}
+
 chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
-    if (!tab.url?.includes('codeforces.com')) { return; }
+    const url = tab.url;
+    if (!url) { return; }
 
-    if (tab.url.includes('/enter')) {
+    const platform = detectPlatform(url);
+    if (!platform) { return; }
+
+    // Mark tabs that land on the login page.
+    if (isLoginUrl(url, platform)) {
         const tabs = await getLoginTabs();
-        tabs.add(tabId);
+        tabs[String(tabId)] = platform;
         await saveLoginTabs(tabs);
         return;
     }
 
-    // Tab navigated away from /enter — check if login just completed.
+    // Only act when a full navigation completes.
     if (changeInfo.status !== 'complete') { return; }
-    const tabs = await getLoginTabs();
-    if (!tabs.has(tabId)) { return; }
 
-    tabs.delete(tabId);
+    const tabs = await getLoginTabs();
+    const trackedPlatform = tabs[String(tabId)];
+    if (!trackedPlatform) { return; }
+
+    // Tab navigated away from login — check if they're now signed in.
+    delete tabs[String(tabId)];
     await saveLoginTabs(tabs);
 
-    // Check if the user is now logged in.
     let handle = null;
     try {
+        const handleFunc = trackedPlatform === 'atcoder' ? getAtCoderHandle : getCodeforcesHandle;
         const [result] = await chrome.scripting.executeScript({
             target: { tabId },
-            func: () => document.querySelector('a[href^="/profile/"]')?.textContent?.trim() ?? null,
+            func: handleFunc,
         });
         handle = result?.result;
     } catch {
@@ -43,13 +73,14 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
     if (!handle) { return; }
 
-    // Send session to VS Code and show a badge on success.
+    // Send the session cookies to VS Code.
     try {
-        const cookies = await chrome.cookies.getAll({ domain: 'codeforces.com' });
+        const cookieDomain = trackedPlatform === 'atcoder' ? 'atcoder.jp' : 'codeforces.com';
+        const cookies = await chrome.cookies.getAll({ domain: cookieDomain });
         const res = await fetch(`http://127.0.0.1:${PORT}/session`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ platform: 'codeforces', cookies }),
+            body: JSON.stringify({ platform: trackedPlatform, cookies }),
         });
         if (res.ok) {
             chrome.action.setBadgeText({ text: 'OK' });
@@ -63,8 +94,8 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo, tab) => {
 
 chrome.tabs.onRemoved.addListener(async (tabId) => {
     const tabs = await getLoginTabs();
-    if (tabs.has(tabId)) {
-        tabs.delete(tabId);
+    if (tabs[String(tabId)]) {
+        delete tabs[String(tabId)];
         await saveLoginTabs(tabs);
     }
 });

@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "CP Sidekick Companion",
-  "version": "1.3.0",
-  "description": "Send Codeforces problems and sessions to VS Code with one click.",
+  "version": "1.4.0",
+  "description": "Send Codeforces and AtCoder problems and sessions to VS Code with one click.",
   "permissions": ["activeTab", "scripting", "cookies", "tabs", "storage"],
-  "host_permissions": ["*://*.codeforces.com/*"],
+  "host_permissions": ["*://*.codeforces.com/*", "*://*.atcoder.jp/*"],
   "background": {
     "service_worker": "background.js"
   },
