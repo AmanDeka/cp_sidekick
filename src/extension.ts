@@ -7,6 +7,7 @@ import { runTests } from './core/runner';
 import { showResults } from './ui/resultsPanel';
 import { getSession, setSession, clearSession } from './core/secrets';
 import { CodeforcesClient } from './platforms/codeforces';
+import { AtCoderClient } from './platforms/atcoder';
 import { startServer } from './core/server';
 import type { Language, Platform, ProblemMeta, AuthSession } from './types';
 
@@ -111,13 +112,17 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('cpSidekick.login', async () => {
       const platform = await vscode.window.showQuickPick(
-        [{ label: 'Codeforces', value: 'codeforces' as Platform }],
+        [
+          { label: 'Codeforces', value: 'codeforces' as Platform },
+          { label: 'AtCoder', value: 'atcoder' as Platform },
+        ],
         { placeHolder: 'Select platform' }
       );
       if (!platform) { return; }
 
       const loginUrls: Record<string, string> = {
         codeforces: 'https://codeforces.com/enter',
+        atcoder: 'https://atcoder.jp/login',
       };
 
       await vscode.env.openExternal(vscode.Uri.parse(loginUrls[platform.value]));
@@ -129,7 +134,10 @@ export function activate(context: vscode.ExtensionContext): void {
 
     vscode.commands.registerCommand('cpSidekick.logout', async () => {
       const platform = await vscode.window.showQuickPick(
-        [{ label: 'Codeforces', value: 'codeforces' as Platform }],
+        [
+          { label: 'Codeforces', value: 'codeforces' as Platform },
+          { label: 'AtCoder', value: 'atcoder' as Platform },
+        ],
         { placeHolder: 'Select platform to sign out of' }
       );
       if (!platform) { return; }
@@ -180,7 +188,7 @@ export function activate(context: vscode.ExtensionContext): void {
         { location: vscode.ProgressLocation.Notification, title: 'CP Sidekick: Submitting...' },
         async () => {
           try {
-            const client = new CodeforcesClient();
+            const client = meta.platform === 'atcoder' ? new AtCoderClient() : new CodeforcesClient();
             const statusUrl = await client.submit(meta, solutionCode, session, languageId);
             const open = await vscode.window.showInformationMessage(
               'CP Sidekick: Submitted! View your submission?',

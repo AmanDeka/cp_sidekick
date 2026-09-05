@@ -38,8 +38,14 @@ interface CompanionPayload {
   cookies?: ChromeCookie[];
 }
 
-function buildCookieJar(chromeCookies: ChromeCookie[]): string {
+const PLATFORM_ORIGINS: Record<string, string> = {
+  codeforces: 'https://codeforces.com/',
+  atcoder: 'https://atcoder.jp/',
+};
+
+function buildCookieJar(chromeCookies: ChromeCookie[], platform = 'codeforces'): string {
   const jar = new CookieJar();
+  const origin = PLATFORM_ORIGINS[platform] ?? 'https://codeforces.com/';
   for (const c of chromeCookies) {
     try {
       const cookieProps: ConstructorParameters<typeof Cookie>[0] = {
@@ -54,7 +60,7 @@ function buildCookieJar(chromeCookies: ChromeCookie[]): string {
         cookieProps.expires = new Date(c.expirationDate * 1000);
       }
       const cookie = new Cookie(cookieProps);
-      jar.setCookieSync(cookie, 'https://codeforces.com/');
+      jar.setCookieSync(cookie, origin);
     } catch {
       // skip malformed cookies
     }
@@ -102,7 +108,7 @@ export function startServer(
         }
         try {
           const platform = (payload.platform ?? 'codeforces') as Platform;
-          const cookieJarJson = buildCookieJar(payload.cookies);
+          const cookieJarJson = buildCookieJar(payload.cookies, platform);
           await onSession(platform, cookieJarJson);
           jsonResponse(res, 200, { ok: true });
         } catch (err) {
@@ -148,7 +154,7 @@ export function startServer(
       try {
         // Silently refresh the session if cookies were included alongside the problem.
         if (payload.cookies && Array.isArray(payload.cookies) && payload.cookies.length > 0) {
-          const cookieJarJson = buildCookieJar(payload.cookies);
+          const cookieJarJson = buildCookieJar(payload.cookies, meta.platform);
           await onSession(meta.platform, cookieJarJson, true);
         }
 
