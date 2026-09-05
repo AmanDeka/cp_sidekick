@@ -137,6 +137,6 @@ export function detectAtCoderUrl(url: string): boolean {
 export function defaultLanguageId(): Record<Language, string> {
     // IDs can vary per contest — expose as user settings and look them up
     // from the <select> on the live submit page if these become stale.
-    // Current defaults: C++ (GCC 9.2.1) = 4003, Python (3.8.2) = 4047, Java (OpenJDK 11.0.6) = 4005
-    return { cpp: '4003', python: '4047', java: '4005' };
+    // Current defaults: C++ (GCC 12.2) = 5001, Python (3.11.4) = 5055, Java (21.0.2) = 5005
+    return { cpp: '5001', python: '5055', java: '5005' };
 }
